@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tri outils Horotec</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#e4002b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="apple-touch-icon" href="icon-512.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,400..800&display=swap" rel="stylesheet">
+<style>
+/* VOICE: atelier, précis, sans fioritures — un outil qu'on utilise debout à l'établi
+   IDEA: une fiche d'inventaire suisse / tableau d'horaire CFF : référence = heure de départ
+   PICTURE: la zone de scan elle-même, grande, avec le résultat en gros chiffres
+   COLOUR and TYPE: blanc, noir, rouge signal #e4002b, un gris ; Archivo large 800 pour les références
+   LAYOUT: colonne unique, bord gauche strict, filet épais en haut, références en colonne gauche */
+:root{color-scheme:light dark;--bg:light-dark(#fff,#0e0e0e);--ink:light-dark(#111,#f2f2f2);--grey:light-dark(#6b6b6b,#9a9a9a);--line:light-dark(#e3e3e3,#2a2a2a);--red:#e4002b;--field:light-dark(#f5f5f5,#191919)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Archivo,system-ui,sans-serif;overflow-x:clip}
+.wrap{max-width:760px;margin:0 auto;padding:0 max(5vw,16px) 48px}
+header{border-top:10px solid var(--red);padding:22px 0 14px;display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font-size:clamp(28px,6vw,44px);line-height:1.05;margin:0;font-weight:800;font-stretch:112%;text-wrap:balance}
+.count{color:var(--grey);font-size:14px;white-space:nowrap}
+.scan{display:grid;gap:12px;margin:10px 0 18px}
+.big{display:flex;align-items:center;justify-content:center;gap:12px;min-height:120px;border:0;border-radius:4px;background:var(--red);color:#fff;font:800 22px/1.1 Archivo,sans-serif;font-stretch:112%;cursor:pointer;width:100%}
+.big:focus-visible,button:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+.big svg{width:40px;height:40px;flex:none}
+.row{display:flex;gap:8px}
+#q{flex:1;font:600 18px Archivo,sans-serif;padding:14px;border:2px solid var(--ink);border-radius:4px;background:var(--bg);color:var(--ink);min-height:52px}
+.btn{min-height:44px;padding:10px 16px;border:2px solid var(--ink);border-radius:4px;background:var(--bg);color:var(--ink);font:700 15px Archivo,sans-serif;cursor:pointer}
+.status{min-height:22px;font-size:14px;color:var(--grey)}
+.status.err{color:var(--red)}
+.hit{border-top:3px solid var(--ink);padding:16px 0}
+.hit:first-child .ref{color:var(--red)}
+.ref{font-weight:800;font-stretch:112%;font-size:clamp(26px,6vw,36px);line-height:1.05;white-space:nowrap}
+.name{font-size:17px;margin:6px 0}
+.meta{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:14px;color:var(--grey)}
+.loc{display:inline-block;background:var(--ink);color:var(--bg);font-weight:700;padding:2px 8px;border-radius:3px}
+a{color:inherit}
+.none{border-top:3px solid var(--red);padding:16px 0}
+h2{font-size:20px;margin:34px 0 8px;font-weight:800;font-stretch:112%}
+.hist{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1px solid var(--line);background:var(--field);color:var(--ink);border-radius:3px;padding:8px 10px;font:600 14px Archivo,sans-serif;cursor:pointer;min-height:40px}
+details{border-top:1px solid var(--line);padding:12px 0}
+summary{font-weight:700;cursor:pointer;min-height:32px}
+.small{font-size:14px;color:var(--grey)}
+.hide{display:none}
+#cam{position:fixed;inset:0;background:#000;z-index:10;display:flex;flex-direction:column}
+#cam.hide{display:none}
+#cam video{flex:1;width:100%;object-fit:cover;min-height:0}
+#cam .aim{position:absolute;left:8%;right:8%;top:38%;height:22%;border:3px solid var(--red);border-radius:6px;box-shadow:0 0 0 9999px rgba(0,0,0,.35);pointer-events:none}
+#cam .bar{display:flex;gap:10px;padding:14px max(5vw,16px) calc(14px + env(safe-area-inset-bottom));background:#000;color:#fff;align-items:center}
+#cam .bar span{flex:1;font-size:15px}
+#cam .bar button{min-height:48px;padding:10px 18px;border:2px solid #fff;border-radius:4px;background:transparent;color:#fff;font:700 16px Archivo,sans-serif}
+@media (prefers-reduced-motion:no-preference){.hit{animation:in .25s ease-out}@keyframes in{from{opacity:0;transform:translateY(6px)}}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>Tri outils Horotec</h1>
+  <span class="count" id="count"></span>
+</header>
+
+<section class="scan">
+  <button class="big" type="button" id="live">
+    <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="3"><path d="M4 12V4h8M28 4h8v8M36 28v8h-8M12 36H4v-8"/><path d="M11 12v16M16 12v16M20 12v16M25 12v16M29 12v16" stroke-width="2.5"/></svg>
+    Scanner un code-barres
+  </button>
+  <label class="btn" for="photo" style="text-align:center">Ou scanner depuis une photo</label>
+  <input id="photo" class="hide" type="file" accept="image/*" capture="environment">
+  <form class="row" id="f">
+    <input id="q" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Référence, ex. 07.368 ou tournevis" aria-label="Référence ou nom de l'outil">
+    <button class="btn" type="submit">OK</button>
+  </form>
+  <div class="status" id="st" role="status">Prends une photo du code, tape une référence, ou utilise une douchette Bluetooth dans ce champ.</div>
+</section>
+
+<div id="cam" class="hide" role="dialog" aria-label="Scanner"><video id="vid" playsinline muted></video><div class="aim"></div><div class="bar"><span id="camst">Vise le code-barres…</span><button type="button" id="stop">Fermer</button></div></div>
+<section id="res" aria-live="polite"></section>
+
+<h2>Derniers scans</h2>
+<div class="hist" id="hist"><span class="small">Aucun pour l'instant.</span></div>
+
+<h2>Catalogue</h2>
+<details>
+  <summary>Ajouter emplacements ou codes-barres (Excel ou CSV)</summary>
+  <p class="small">Colonnes reconnues : <b>référence</b>, et en option <b>emplacement</b> (tiroir, casier), <b>code-barres</b> (EAN), <b>désignation</b>. Les infos s'ajoutent aux références Horotec ; une référence inconnue est ajoutée comme nouvel outil. Enregistré sur cet appareil seulement.</p>
+  <div class="row" style="flex-wrap:wrap">
+    <label class="btn" for="imp">Choisir un fichier</label>
+    <input id="imp" class="hide" type="file" accept=".csv,.xlsx,.xls,.txt">
+    <button class="btn" type="button" id="reset">Effacer l'import</button>
+  </div>
+  <p class="small" id="impst"></p>
+</details>
+<p class="small">Source : catalogue Outils Horotec 2025 (FR), 690 pages, références lues dans l'index. Les désignations sont extraites automatiquement et peuvent être incomplètes : la page indiquée fait foi.</p>
+</div>
+
+<script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+{
+let BASE=[];
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const norm=s=>String(s??'').toUpperCase().replace(/[^A-Z0-9]/g,'').replace(/^MSA/,'');
+const plain=s=>String(s??'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+const store={get(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true}catch(e){return false}}};
+
+let extra=store.get('horotec-extra')||[];let cat=[];
+let hist=store.get('horotec-hist')||[];
+let idx=[];
+function merge(){
+  const m=new Map(BASE.map(t=>[norm(t.ref),{...t}]));
+  for(const e of extra){const k=norm(e.ref),o=m.get(k);if(o){if(e.loc)o.loc=e.loc;if(e.ean)o.ean=e.ean;if(e.name&&!o.name)o.name=e.name}else m.set(k,{...e})}
+  cat=[...m.values()];build();
+}
+function build(){
+  idx=cat.map(t=>({t,n:norm(t.ref),e:String(t.ean||'').toUpperCase().replace(/[^A-Z0-9]/g,''),p:plain(t.name+' '+(t.cat||''))}));
+  $('count').textContent=cat.length.toLocaleString('fr-CH')+' références'+(extra.length?' · '+extra.length+' importées':'');
+}
+
+function search(raw){
+  const q=String(raw).trim(); if(!q) return [];
+  const n=norm(q), rawc=q.toUpperCase().replace(/[^A-Z0-9]/g,''), words=plain(q).split(/\s+/).filter(Boolean);
+  const scored=[];
+  for(const x of idx){
+    let s=0;
+    if(x.e&&rawc.length>=4&&x.e===rawc) s=100;
+    else if(n&&x.n===n) s=95;
+    else if(n.length>=3&&x.n.startsWith(n)) s=80-(x.n.length-n.length);
+    else if(n.length>=3&&n.startsWith(x.n)&&x.n.length>=5) s=70;
+    else if(n.length>=4&&x.n.includes(n)) s=50;
+    else if(words.length&&words.every(w=>x.p.includes(w))) s=30;
+    if(s) scored.push([s,x.t]);
+  }
+  return scored.sort((a,b)=>b[0]-a[0]).slice(0,8).map(a=>a[1]);
+}
+
+const webLink=q=>'https://www.google.com/search?q='+encodeURIComponent('site:horotec.ch '+q);
+function show(q,via){
+  const r=search(q);
+  if(r.length){
+    $('res').innerHTML=r.map(t=>`<article class="hit">
+      <div class="ref">${esc(t.ref)}</div>
+      <div class="name">${esc(t.name)}</div>${t.det?`<div class="small">${esc(t.det)}</div>`:''}
+      <div class="meta">${t.loc?`<span class="loc">${esc(t.loc)}</span>`:''}${t.cat?`<span>${esc(t.cat)}</span>`:''}${t.page?`<span>Catalogue p. ${esc(t.page)} (PDF p. ${esc(t.pdf)})</span>`:''}${t.ean?`<span>EAN ${esc(t.ean)}</span>`:''}<a href="${esc(webLink(t.ref))}" target="_blank" rel="noopener">Voir sur horotec.ch</a></div>
+    </article>`).join('');
+    status(r.length+' résultat'+(r.length>1?'s':'')+' pour « '+q+' »'+(via?' ('+via+')':''));
+    addHist(q);
+  }else{
+    $('res').innerHTML=`<div class="none"><div class="ref">${esc(q)}</div><p>Pas dans le catalogue chargé.</p><a class="btn" style="display:inline-block;text-decoration:none" href="${esc(webLink(q))}" target="_blank" rel="noopener">Chercher « ${esc(q)} » sur horotec.ch</a></div>`;
+    if(via==='scan') $('res').insertAdjacentHTML('beforeend',`<form class="none" id="link"><p><b>Associer ce code à une référence</b><br><span class="small">Tape la référence écrite sur l'étiquette. La prochaine fois, ce code sera reconnu directement sur ce téléphone.</span></p><div class="row"><input id="lref" style="flex:1;font:600 18px Archivo,sans-serif;padding:12px;border:2px solid var(--ink);border-radius:4px;background:var(--bg);color:var(--ink)" placeholder="ex. MSA26.150" autocapitalize="characters" aria-label="Référence à associer"><button class="btn" type="submit">Associer</button></div><p class="small" id="lst"></p></form>`);
+    status('Aucun résultat'+(via?' ('+via+')':''),true);
+    const lf=$('link'); if(lf) lf.addEventListener('submit',ev=>{ev.preventDefault();
+      const r=$('lref').value.trim(); const hit=search(r)[0];
+      if(!r){return}
+      const ref=hit&&norm(hit.ref)===norm(r)?hit.ref:r;
+      extra=[...extra.filter(e=>!(e.ean&&e.ean===q)),{ref,ean:q}];
+      const ok=store.set('horotec-extra',extra); merge(); show(q,'scan');
+      status('Code '+q+' associé à '+ref+(ok?'.':' (pas enregistré : ce navigateur bloque le stockage).'));
+    });
+  }
+}
+function status(m,err){$('st').textContent=m;$('st').classList.toggle('err',!!err)}
+function addHist(q){hist=[q,...hist.filter(h=>h!==q)].slice(0,10);store.set('horotec-hist',hist);drawHist()}
+function drawHist(){
+  $('hist').innerHTML=hist.length?hist.map(h=>`<button class="chip" type="button" data-q="${esc(h)}">${esc(h)}</button>`).join(''):'<span class="small">Aucun pour l\'instant.</span>';
+}
+
+$('f').addEventListener('submit',e=>{e.preventDefault();show($('q').value);$('q').select()});
+let tm;$('q').addEventListener('input',()=>{clearTimeout(tm);const v=$('q').value;if(v.trim().length>=3)tm=setTimeout(()=>show(v),250)});
+$('hist').addEventListener('click',e=>{const b=e.target.closest('[data-q]');if(b){$('q').value=b.dataset.q;show(b.dataset.q)}});
+
+async function decode(file){
+  const url=URL.createObjectURL(file);
+  try{
+    if('BarcodeDetector' in window){
+      try{
+        const bmp=await createImageBitmap(file);
+        const codes=await new BarcodeDetector().detect(bmp);
+        if(codes.length) return codes[0].rawValue;
+      }catch(e){}
+    }
+    if(window.ZXing){
+      const hints=new Map();hints.set(ZXing.DecodeHintType.TRY_HARDER,true);
+      const reader=new ZXing.BrowserMultiFormatReader(hints);
+      const res=await reader.decodeFromImageUrl(url);
+      return res.getText();
+    }
+    throw new Error('no decoder');
+  }finally{URL.revokeObjectURL(url)}
+}
+$('photo').addEventListener('change',async e=>{
+  const f=e.target.files[0];e.target.value='';if(!f)return;
+  status('Lecture du code…');
+  try{const code=(await decode(f)).trim();$('q').value=code;show(code,'scan')}
+  catch(err){status('Code illisible. Rapproche-toi, évite les reflets, ou tape la référence.',true)}
+});
+
+const pick=(row,keys)=>{for(const k of Object.keys(row)){const p=plain(k).replace(/[^a-z]/g,'');if(keys.some(x=>p.includes(x)))return String(row[k]).trim()}return ''};
+$('imp').addEventListener('change',async e=>{
+  const f=e.target.files[0];e.target.value='';if(!f)return;
+  try{
+    if(!window.XLSX) throw new Error('lecteur Excel non chargé');
+    const wb=XLSX.read(await f.arrayBuffer(),{type:'array'});
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
+    const list=rows.map(r=>({ref:pick(r,['ref','article','numero','no']),name:pick(r,['design','nom','name','libelle','descr']),loc:pick(r,['emplacement','tiroir','casier','loc','rangement']),ean:pick(r,['ean','gtin','codebarre','barcode']),cat:pick(r,['categ','famille','groupe'])})).filter(t=>t.ref);
+    if(!list.length) throw new Error('aucune colonne « référence » trouvée');
+    extra=list;merge();
+    $('impst').textContent=list.length+' lignes importées'+(store.set('horotec-extra',list)?' et enregistrées sur cet appareil.':'. Attention : ce navigateur ne permet pas de les garder, il faudra réimporter.');
+  }catch(err){$('impst').textContent='Import impossible : '+err.message}
+});
+$('reset').addEventListener('click',()=>{extra=[];try{localStorage.removeItem('horotec-extra')}catch(e){}merge();$('impst').textContent='Import effacé, catalogue Horotec seul.'});
+
+let stream=null,running=false,zx=null;
+async function stopCam(){running=false;try{zx&&zx.reset()}catch(e){}zx=null;if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}$('cam').classList.add('hide')}
+function found(code){if(!running)return;code=String(code).trim();if(!code)return;stopCam();try{navigator.vibrate&&navigator.vibrate(80)}catch(e){}$('q').value=code;show(code,'scan')}
+$('stop').addEventListener('click',stopCam);
+$('live').addEventListener('click',async()=>{
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){status('Caméra indisponible ici : utilise « scanner depuis une photo ».',true);return}
+  $('cam').classList.remove('hide');$('camst').textContent='Vise le code-barres…';running=true;
+  const v=$('vid');
+  try{
+    let formats=null;
+    if('BarcodeDetector' in window){try{formats=await BarcodeDetector.getSupportedFormats()}catch(e){}}
+    if(formats&&formats.length){
+      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false});
+      v.srcObject=stream;await v.play();
+      const det=new BarcodeDetector({formats});
+      const loop=async()=>{if(!running)return;try{const c=await det.detect(v);if(c.length){found(c[0].rawValue);return}}catch(e){}setTimeout(loop,120)};loop();
+    }else if(window.ZXing){
+      const hints=new Map();hints.set(ZXing.DecodeHintType.TRY_HARDER,true);
+      zx=new ZXing.BrowserMultiFormatReader(hints,150);
+      await zx.decodeFromConstraints({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}},v,(res)=>{if(res)found(res.getText())});
+    }else throw new Error('Lecteur non chargé');
+  }catch(err){stopCam();status(err&&err.name==='NotAllowedError'?'Accès caméra refusé : autorise la caméra pour ce site dans le navigateur.':'Caméra indisponible ('+(err&&err.message||err)+'). Utilise « scanner depuis une photo ».',true)}
+});
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&running)stopCam()});
+
+drawHist();status('Chargement du catalogue…');
+fetch('catalogue.json').then(r=>{if(!r.ok)throw 0;return r.json()}).then(a=>{
+  BASE=a.map(x=>({ref:x.r,name:x.n,det:x.d,cat:x.c,page:x.p,pdf:x.q}));merge();
+  status('Prends une photo du code, tape une référence, ou utilise une douchette Bluetooth dans ce champ.');
+}).catch(()=>{merge();status('Catalogue introuvable. Recharge la page.',true)});
+}
+</script>
+</body>
+</html>
