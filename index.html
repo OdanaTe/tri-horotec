@@ -2,6 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Tri outils Horotec</title>
 <link rel="manifest" href="manifest.json">
@@ -108,10 +109,10 @@ summary{font-weight:700;cursor:pointer;min-height:32px}
   <p class="small" id="impst"></p>
 </details>
 <p class="small">Source : catalogue Outils Horotec 2025 (FR), 690 pages, références lues dans l'index. Les désignations sont extraites automatiquement et peuvent être incomplètes : la page indiquée fait foi.</p>
-<footer class="credit">Créé par <b>Keitha N</b></footer>
+<footer class="credit">Créé par <b>Keitha N</b><br><span class="small">Version du 2026-11-26 17:00</span></footer>
 </div>
 
-<script src="code128.js"></script>
+<script src="code128.js?v=3"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
@@ -299,7 +300,7 @@ let camOk=false;try{camOk=localStorage.getItem('horotec-cam')==='1'}catch(e){}
 if(camOk)startCam();
 
 drawHist();status('Chargement du catalogue…');
-fetch('catalogue.json').then(r=>{if(!r.ok)throw 0;return r.json()}).then(a=>{
+fetch('catalogue.json?v=3').then(r=>{if(!r.ok)throw 0;return r.json()}).then(a=>{
   BASE=a.map(x=>({ref:x.r,name:x.n,det:x.d,cat:x.c,page:x.p,pdf:x.q}));merge();
   status('Prends une photo du code, tape une référence, ou utilise une douchette Bluetooth dans ce champ.');
 }).catch(()=>{merge();status('Catalogue introuvable. Recharge la page.',true)});
