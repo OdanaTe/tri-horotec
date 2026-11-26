@@ -55,13 +55,15 @@ summary{font-weight:700;cursor:pointer;min-height:32px}
 #pv .bar{display:flex;gap:8px;padding:10px max(4vw,12px) calc(10px + env(safe-area-inset-bottom));align-items:center;border-top:3px solid var(--red);flex-wrap:wrap}
 #pv .bar span{flex:1;font-weight:700;white-space:nowrap}
 .pg{display:inline-block;margin-top:10px;background:var(--red);color:#fff;font-weight:700;padding:10px 14px;border-radius:4px;text-decoration:none;border:0;font:700 15px Archivo,sans-serif;cursor:pointer;min-height:44px}
-#cam{position:fixed;inset:0;background:#000;z-index:10;display:flex;flex-direction:column}
-#cam.hide{display:none}
-#cam video{flex:1;width:100%;object-fit:cover;min-height:0}
-#cam .aim{position:absolute;left:8%;right:8%;top:38%;height:22%;border:3px solid var(--red);border-radius:6px;box-shadow:0 0 0 9999px rgba(0,0,0,.35);pointer-events:none}
-#cam .bar{display:flex;gap:10px;padding:14px max(5vw,16px) calc(14px + env(safe-area-inset-bottom));background:#000;color:#fff;align-items:center}
-#cam .bar span{flex:1;font-size:15px}
-#cam .bar button{min-height:48px;padding:10px 18px;border:2px solid #fff;border-radius:4px;background:transparent;color:#fff;font:700 16px Archivo,sans-serif}
+#cam{position:relative;background:#000;border-radius:4px;overflow:hidden;height:min(42vh,360px)}
+#cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+#cam .aim{position:absolute;left:10%;right:10%;top:30%;height:40%;border:3px solid var(--red);border-radius:6px;pointer-events:none;transition:border-color .2s}
+#cam.ok .aim{border-color:#18c964}
+#cam .msg{position:absolute;left:0;right:0;bottom:0;padding:10px 12px;background:linear-gradient(transparent,rgba(0,0,0,.75));color:#fff;font-size:15px;display:flex;gap:10px;align-items:center}
+#cam .msg span{flex:1}
+#cam .msg button{min-height:40px;padding:6px 14px;border:2px solid #fff;border-radius:4px;background:transparent;color:#fff;font:700 15px Archivo,sans-serif}
+#cam .start{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:12px;border:0;background:var(--red);color:#fff;font:800 22px/1.1 Archivo,sans-serif;font-stretch:112%;cursor:pointer;width:100%}
+#cam .start svg{width:40px;height:40px}
 @media (prefers-reduced-motion:no-preference){.hit{animation:in .25s ease-out}@keyframes in{from{opacity:0;transform:translateY(6px)}}}
 </style>
 </head>
@@ -73,10 +75,9 @@ summary{font-weight:700;cursor:pointer;min-height:32px}
 </header>
 
 <section class="scan">
-  <button class="big" type="button" id="live">
-    <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="3"><path d="M4 12V4h8M28 4h8v8M36 28v8h-8M12 36H4v-8"/><path d="M11 12v16M16 12v16M20 12v16M25 12v16M29 12v16" stroke-width="2.5"/></svg>
-    Scanner un code-barres
-  </button>
+  <div id="cam"><video id="vid" playsinline muted autoplay></video><div class="aim"></div>
+    <div class="msg"><span id="camst">Vise un code-barres</span><button type="button" id="stop">Pause</button></div>
+    <button class="start" type="button" id="live"><svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="3"><path d="M4 12V4h8M28 4h8v8M36 28v8h-8M12 36H4v-8"/><path d="M11 12v16M16 12v16M20 12v16M25 12v16M29 12v16" stroke-width="2.5"/></svg>Activer le scanner</button></div>
   <label class="btn" for="photo" style="text-align:center">Ou scanner depuis une photo</label>
   <input id="photo" class="hide" type="file" accept="image/*" capture="environment">
   <form class="row" id="f">
@@ -86,7 +87,6 @@ summary{font-weight:700;cursor:pointer;min-height:32px}
   <div class="status" id="st" role="status">Prends une photo du code, tape une référence, ou utilise une douchette Bluetooth dans ce champ.</div>
 </section>
 
-<div id="cam" class="hide" role="dialog" aria-label="Scanner"><video id="vid" playsinline muted></video><div class="aim"></div><div class="bar"><span id="camst">Vise le code-barres…</span><button type="button" id="stop">Fermer</button></div></div>
 <div id="pv" class="hide" role="dialog" aria-label="Page du catalogue"><div class="sc" id="pvsc"><img id="pvimg" alt="Page du catalogue Horotec"></div><div class="bar"><button class="btn" type="button" id="pvprev" aria-label="Page précédente">‹</button><span id="pvlab"></span><button class="btn" type="button" id="pvnext" aria-label="Page suivante">›</button><a class="btn" id="pvzoom" target="_blank" rel="noopener" style="text-decoration:none">Zoom</a><button class="btn" type="button" id="pvclose">Fermer</button></div></div>
 <section id="res" aria-live="polite"></section>
 
@@ -231,30 +231,46 @@ $('res').addEventListener('click',e=>{const b=e.target.closest('[data-pg]');if(b
 $('pvprev').addEventListener('click',()=>openPage(pvp-1));$('pvnext').addEventListener('click',()=>openPage(pvp+1));
 $('pvclose').addEventListener('click',()=>$('pv').classList.add('hide'));
 document.addEventListener('keydown',e=>{if($('pv').classList.contains('hide'))return;if(e.key==='Escape')$('pv').classList.add('hide');if(e.key==='ArrowLeft')openPage(pvp-1);if(e.key==='ArrowRight')openPage(pvp+1)});
-let stream=null,running=false,zx=null;
-async function stopCam(){running=false;try{zx&&zx.reset()}catch(e){}zx=null;if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}$('cam').classList.add('hide')}
-function found(code){if(!running)return;code=String(code).trim();if(!code)return;stopCam();try{navigator.vibrate&&navigator.vibrate(80)}catch(e){}$('q').value=code;show(code,'scan')}
-$('stop').addEventListener('click',stopCam);
-$('live').addEventListener('click',async()=>{
-  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){status('Caméra indisponible ici : utilise « scanner depuis une photo ».',true);return}
-  $('cam').classList.remove('hide');$('camst').textContent='Vise le code-barres…';running=true;
-  const v=$('vid');
+let stream=null,running=false,zx=null,last='',lastT=0,paused=false;
+const camst=m=>$('camst').textContent=m;
+async function stopCam(){running=false;try{zx&&zx.reset()}catch(e){}zx=null;if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}}
+function found(code){
+  code=String(code).trim();if(!code||!running)return;
+  const now=Date.now();if(code===last&&now-lastT<4000)return;last=code;lastT=now;
+  try{navigator.vibrate&&navigator.vibrate(80)}catch(e){}
+  $('cam').classList.add('ok');setTimeout(()=>$('cam').classList.remove('ok'),600);
+  camst('Lu : '+code+' · vise le suivant');$('q').value=code;show(code,'scan');
+  
+}
+async function startCam(){
+  if(running)return;
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){camst('Caméra indisponible : utilise « scanner depuis une photo »');return}
+  const v=$('vid'),cons={video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false};
+  running=true;paused=false;$('stop').textContent='Pause';camst('Vise un code-barres');
   try{
     let formats=null;
     if('BarcodeDetector' in window){try{formats=await BarcodeDetector.getSupportedFormats()}catch(e){}}
     if(formats&&formats.length){
-      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false});
-      v.srcObject=stream;await v.play();
+      stream=await navigator.mediaDevices.getUserMedia(cons);v.srcObject=stream;await v.play();
       const det=new BarcodeDetector({formats});
-      const loop=async()=>{if(!running)return;try{const c=await det.detect(v);if(c.length){found(c[0].rawValue);return}}catch(e){}setTimeout(loop,120)};loop();
+      const loop=async()=>{if(!running)return;try{if(v.readyState>=2){const c=await det.detect(v);if(c.length)found(c[0].rawValue)}}catch(e){}setTimeout(loop,120)};loop();
     }else if(window.ZXing){
       const hints=new Map();hints.set(ZXing.DecodeHintType.TRY_HARDER,true);
       zx=new ZXing.BrowserMultiFormatReader(hints,150);
-      await zx.decodeFromConstraints({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}},v,(res)=>{if(res)found(res.getText())});
-    }else throw new Error('Lecteur non chargé');
-  }catch(err){stopCam();status(err&&err.name==='NotAllowedError'?'Accès caméra refusé : autorise la caméra pour ce site dans le navigateur.':'Caméra indisponible ('+(err&&err.message||err)+'). Utilise « scanner depuis une photo ».',true)}
-});
-document.addEventListener('visibilitychange',()=>{if(document.hidden&&running)stopCam()});
+      await zx.decodeFromConstraints(cons,v,res=>{if(res)found(res.getText())});
+    }else throw new Error('lecteur non chargé');
+    $('live').classList.add('hide');
+    try{localStorage.setItem('horotec-cam','1')}catch(e){}
+  }catch(err){
+    await stopCam();$('live').classList.remove('hide');
+    status(err&&err.name==='NotAllowedError'?'Accès caméra refusé : autorise la caméra pour ce site dans les réglages du navigateur.':'Caméra indisponible ('+(err&&err.message||err)+'). Utilise « scanner depuis une photo ».',true);
+  }
+}
+$('live').addEventListener('click',startCam);
+$('stop').addEventListener('click',async()=>{if(running){await stopCam();paused=true;$('stop').textContent='Reprendre';camst('Scanner en pause')}else startCam()});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){if(running)stopCam()}else if(!paused&&!$('live').classList.contains('hide'))0;else if(!paused)startCam()});
+let camOk=false;try{camOk=localStorage.getItem('horotec-cam')==='1'}catch(e){}
+if(camOk)startCam();
 
 drawHist();status('Chargement du catalogue…');
 fetch('catalogue.json').then(r=>{if(!r.ok)throw 0;return r.json()}).then(a=>{
