@@ -48,6 +48,13 @@ details{border-top:1px solid var(--line);padding:12px 0}
 summary{font-weight:700;cursor:pointer;min-height:32px}
 .small{font-size:14px;color:var(--grey)}
 .hide{display:none}
+#pv{position:fixed;inset:0;background:var(--bg);z-index:11;display:flex;flex-direction:column}
+#pv.hide{display:none}
+#pv .sc{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;background:#777}
+#pv img{display:block;width:100%;height:auto;max-width:1100px;margin:0 auto;background:#fff}
+#pv .bar{display:flex;gap:8px;padding:10px max(4vw,12px) calc(10px + env(safe-area-inset-bottom));align-items:center;border-top:3px solid var(--red);flex-wrap:wrap}
+#pv .bar span{flex:1;font-weight:700;white-space:nowrap}
+.pg{display:inline-block;margin-top:10px;background:var(--red);color:#fff;font-weight:700;padding:10px 14px;border-radius:4px;text-decoration:none;border:0;font:700 15px Archivo,sans-serif;cursor:pointer;min-height:44px}
 #cam{position:fixed;inset:0;background:#000;z-index:10;display:flex;flex-direction:column}
 #cam.hide{display:none}
 #cam video{flex:1;width:100%;object-fit:cover;min-height:0}
@@ -80,6 +87,7 @@ summary{font-weight:700;cursor:pointer;min-height:32px}
 </section>
 
 <div id="cam" class="hide" role="dialog" aria-label="Scanner"><video id="vid" playsinline muted></video><div class="aim"></div><div class="bar"><span id="camst">Vise le code-barres…</span><button type="button" id="stop">Fermer</button></div></div>
+<div id="pv" class="hide" role="dialog" aria-label="Page du catalogue"><div class="sc" id="pvsc"><img id="pvimg" alt="Page du catalogue Horotec"></div><div class="bar"><button class="btn" type="button" id="pvprev" aria-label="Page précédente">‹</button><span id="pvlab"></span><button class="btn" type="button" id="pvnext" aria-label="Page suivante">›</button><a class="btn" id="pvzoom" target="_blank" rel="noopener" style="text-decoration:none">Zoom</a><button class="btn" type="button" id="pvclose">Fermer</button></div></div>
 <section id="res" aria-live="polite"></section>
 
 <h2>Derniers scans</h2>
@@ -147,7 +155,7 @@ function show(q,via){
     $('res').innerHTML=r.map(t=>`<article class="hit">
       <div class="ref">${esc(t.ref)}</div>
       <div class="name">${esc(t.name)}</div>${t.det?`<div class="small">${esc(t.det)}</div>`:''}
-      <div class="meta">${t.loc?`<span class="loc">${esc(t.loc)}</span>`:''}${t.cat?`<span>${esc(t.cat)}</span>`:''}${t.page?`<span>Catalogue p. ${esc(t.page)} (PDF p. ${esc(t.pdf)})</span>`:''}${t.ean?`<span>EAN ${esc(t.ean)}</span>`:''}<a href="${esc(webLink(t.ref))}" target="_blank" rel="noopener">Voir sur horotec.ch</a></div>
+      <div class="meta">${t.loc?`<span class="loc">${esc(t.loc)}</span>`:''}${t.cat?`<span>${esc(t.cat)}</span>`:''}${t.page?`<span>Catalogue p. ${esc(t.page)} (PDF p. ${esc(t.pdf)})</span>`:''}${t.ean?`<span>EAN ${esc(t.ean)}</span>`:''}<a href="${esc(webLink(t.ref))}" target="_blank" rel="noopener">Voir sur horotec.ch</a>${t.pdf?`<a href="${PDF}#page=${t.pdf}" target="_blank" rel="noopener">PDF officiel</a>`:''}</div>${t.pdf?`<button class="pg" type="button" data-pg="${+t.pdf}">Voir la page ${esc(t.page)} du catalogue</button>`:''}
     </article>`).join('');
     status(r.length+' résultat'+(r.length>1?'s':'')+' pour « '+q+' »'+(via?' ('+via+')':''));
     addHist(q);
@@ -216,6 +224,13 @@ $('imp').addEventListener('change',async e=>{
 });
 $('reset').addEventListener('click',()=>{extra=[];try{localStorage.removeItem('horotec-extra')}catch(e){}merge();$('impst').textContent='Import effacé, catalogue Horotec seul.'});
 
+const PDF='https://horotec.ch/medias/article/documents/6a965031d2dba_DOCHOR.TOOLS25-FR_FULL_comp.pdf';
+let pvp=1;
+function openPage(n){pvp=Math.min(690,Math.max(1,n));const u='pages/p-'+String(pvp).padStart(3,'0')+'.jpg';$('pvimg').src=u;$('pvzoom').href=u;$('pvlab').textContent='Page PDF '+pvp+' / 690';$('pvsc').scrollTop=0;$('pv').classList.remove('hide')}
+$('res').addEventListener('click',e=>{const b=e.target.closest('[data-pg]');if(b)openPage(+b.dataset.pg)});
+$('pvprev').addEventListener('click',()=>openPage(pvp-1));$('pvnext').addEventListener('click',()=>openPage(pvp+1));
+$('pvclose').addEventListener('click',()=>$('pv').classList.add('hide'));
+document.addEventListener('keydown',e=>{if($('pv').classList.contains('hide'))return;if(e.key==='Escape')$('pv').classList.add('hide');if(e.key==='ArrowLeft')openPage(pvp-1);if(e.key==='ArrowRight')openPage(pvp+1)});
 let stream=null,running=false,zx=null;
 async function stopCam(){running=false;try{zx&&zx.reset()}catch(e){}zx=null;if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}$('cam').classList.add('hide')}
 function found(code){if(!running)return;code=String(code).trim();if(!code)return;stopCam();try{navigator.vibrate&&navigator.vibrate(80)}catch(e){}$('q').value=code;show(code,'scan')}
