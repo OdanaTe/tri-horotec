@@ -57,12 +57,14 @@ summary{font-weight:700;cursor:pointer;min-height:32px}
 .pg{display:inline-block;margin-top:10px;background:var(--red);color:#fff;font-weight:700;padding:10px 14px;border-radius:4px;text-decoration:none;border:0;font:700 15px Archivo,sans-serif;cursor:pointer;min-height:44px}
 #cam{position:relative;background:#000;border-radius:4px;overflow:hidden;height:min(42vh,360px)}
 #cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-#cam .aim{position:absolute;left:10%;right:10%;top:30%;height:40%;border:3px solid var(--red);border-radius:6px;pointer-events:none;transition:border-color .2s}
+#cam .aim{position:absolute;left:4%;right:4%;top:22%;height:56%;border:3px solid var(--red);border-radius:6px;pointer-events:none;transition:border-color .2s}
 #cam.ok .aim{border-color:#18c964}
+#cam .dbg{position:absolute;top:6px;left:8px;right:8px;color:#fff;font-size:12px;text-shadow:0 1px 2px #000;opacity:.85}
 #cam .msg{position:absolute;left:0;right:0;bottom:0;padding:10px 12px;background:linear-gradient(transparent,rgba(0,0,0,.75));color:#fff;font-size:15px;display:flex;gap:10px;align-items:center}
 #cam .msg span{flex:1}
 #cam .msg button{min-height:40px;padding:6px 14px;border:2px solid #fff;border-radius:4px;background:transparent;color:#fff;font:700 15px Archivo,sans-serif}
 #cam .start{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:12px;border:0;background:var(--red);color:#fff;font:800 22px/1.1 Archivo,sans-serif;font-stretch:112%;cursor:pointer;width:100%}
+#cam .start.hide{display:none}
 #cam .start svg{width:40px;height:40px}
 @media (prefers-reduced-motion:no-preference){.hit{animation:in .25s ease-out}@keyframes in{from{opacity:0;transform:translateY(6px)}}}
 </style>
@@ -76,7 +78,7 @@ summary{font-weight:700;cursor:pointer;min-height:32px}
 
 <section class="scan">
   <div id="cam"><video id="vid" playsinline muted autoplay></video><div class="aim"></div>
-    <div class="msg"><span id="camst">Vise un code-barres</span><button type="button" id="stop">Pause</button></div>
+    <div class="dbg" id="camdbg"></div><div class="msg"><span id="camst">Vise un code-barres</span><button type="button" id="stop">Pause</button></div>
     <button class="start" type="button" id="live"><svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="3"><path d="M4 12V4h8M28 4h8v8M36 28v8h-8M12 36H4v-8"/><path d="M11 12v16M16 12v16M20 12v16M25 12v16M29 12v16" stroke-width="2.5"/></svg>Activer le scanner</button></div>
   <label class="btn" for="photo" style="text-align:center">Ou scanner depuis une photo</label>
   <input id="photo" class="hide" type="file" accept="image/*" capture="environment">
@@ -107,6 +109,7 @@ summary{font-weight:700;cursor:pointer;min-height:32px}
 <p class="small">Source : catalogue Outils Horotec 2025 (FR), 690 pages, références lues dans l'index. Les désignations sont extraites automatiquement et peuvent être incomplètes : la page indiquée fait foi.</p>
 </div>
 
+<script src="code128.js"></script>
 <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
@@ -122,8 +125,9 @@ let extra=store.get('horotec-extra')||[];let cat=[];
 let hist=store.get('horotec-hist')||[];
 let idx=[];
 function merge(){
-  const m=new Map(BASE.map(t=>[norm(t.ref),{...t}]));
-  for(const e of extra){const k=norm(e.ref),o=m.get(k);if(o){if(e.loc)o.loc=e.loc;if(e.ean)o.ean=e.ean;if(e.name&&!o.name)o.name=e.name}else m.set(k,{...e})}
+  const key=r=>String(r).toUpperCase().trim(),m=new Map(BASE.map(t=>[key(t.ref),{...t}])),byN=new Map();
+  for(const [k,t] of m){const n=norm(k);if(!byN.has(n))byN.set(n,t)}
+  for(const e of extra){const k=key(e.ref),o=m.get(k)||byN.get(norm(e.ref));if(o){if(e.loc)o.loc=e.loc;if(e.ean)o.ean=e.ean;if(e.name&&!o.name)o.name=e.name}else{m.set(k,{...e});byN.set(norm(k),m.get(k))}}
   cat=[...m.values()];build();
 }
 function build(){
@@ -183,23 +187,31 @@ $('f').addEventListener('submit',e=>{e.preventDefault();show($('q').value);$('q'
 let tm;$('q').addEventListener('input',()=>{clearTimeout(tm);const v=$('q').value;if(v.trim().length>=3)tm=setTimeout(()=>show(v),250)});
 $('hist').addEventListener('click',e=>{const b=e.target.closest('[data-q]');if(b){$('q').value=b.dataset.q;show(b.dataset.q)}});
 
+// ---- moteur de lecture : décodeur Code 128 interne + lecteur natif (Android) + ZXing ----
+const cv=document.createElement('canvas'),cx=cv.getContext('2d',{willReadFrequently:true});
+let mfr=null,natDet=null;
+function zxReader(){if(mfr||!window.ZXing)return mfr;try{const h=new Map();h.set(ZXing.DecodeHintType.TRY_HARDER,true);mfr=new ZXing.MultiFormatReader();mfr.setHints(h)}catch(e){mfr=null}return mfr}
+async function nativeDet(){if(natDet!==null)return natDet;natDet=false;try{if('BarcodeDetector' in window){const f=await BarcodeDetector.getSupportedFormats();if(f&&f.length)natDet=new BarcodeDetector({formats:f})}}catch(e){}return natDet}
+function grayOf(w,h){const d=cx.getImageData(0,0,w,h).data,g=new Uint8Array(w*h);for(let i=0,j=0;j<g.length;i+=4,j++)g[j]=(d[i]*77+d[i+1]*150+d[i+2]*29)>>8;return g}
+// dessine src (vidéo/image) région sx,sy,sw,sh dans le canvas (largeur max maxW) puis tente tous les moteurs
+async function readRegion(src,sx,sy,sw,sh,maxW,useZx){
+  const k=Math.min(1,maxW/sw),w=Math.round(sw*k),h=Math.round(sh*k);
+  if(!w||!h)return null;
+  cv.width=w;cv.height=h;cx.drawImage(src,sx,sy,sw,sh,0,0,w,h);
+  const t=decodeCode128Image(grayOf(w,h),w,h,14);if(t)return t;
+  const nd=await nativeDet();if(nd){try{const c=await nd.detect(cv);if(c.length)return c[0].rawValue}catch(e){}}
+  if(useZx){const r=zxReader();if(r){try{const bm=new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(new ZXing.HTMLCanvasElementLuminanceSource(cv)));return r.decodeWithState(bm).getText()}catch(e){}}}
+  return null;
+}
 async function decode(file){
   const url=URL.createObjectURL(file);
   try{
-    if('BarcodeDetector' in window){
-      try{
-        const bmp=await createImageBitmap(file);
-        const codes=await new BarcodeDetector().detect(bmp);
-        if(codes.length) return codes[0].rawValue;
-      }catch(e){}
-    }
-    if(window.ZXing){
-      const hints=new Map();hints.set(ZXing.DecodeHintType.TRY_HARDER,true);
-      const reader=new ZXing.BrowserMultiFormatReader(hints);
-      const res=await reader.decodeFromImageUrl(url);
-      return res.getText();
-    }
-    throw new Error('no decoder');
+    const img=new Image();img.src=url;await img.decode();
+    const W=img.naturalWidth,H=img.naturalHeight;
+    // image entière, puis bandes horizontales (le code est souvent petit sur la photo)
+    let t=await readRegion(img,0,0,W,H,2000,true);if(t)return t;
+    for(let i=0;i<5;i++){t=await readRegion(img,0,H*i/6,W,H/3,2400,true);if(t)return t}
+    throw new Error('illisible');
   }finally{URL.revokeObjectURL(url)}
 }
 $('photo').addEventListener('change',async e=>{
@@ -231,39 +243,51 @@ $('res').addEventListener('click',e=>{const b=e.target.closest('[data-pg]');if(b
 $('pvprev').addEventListener('click',()=>openPage(pvp-1));$('pvnext').addEventListener('click',()=>openPage(pvp+1));
 $('pvclose').addEventListener('click',()=>$('pv').classList.add('hide'));
 document.addEventListener('keydown',e=>{if($('pv').classList.contains('hide'))return;if(e.key==='Escape')$('pv').classList.add('hide');if(e.key==='ArrowLeft')openPage(pvp-1);if(e.key==='ArrowRight')openPage(pvp+1)});
-let stream=null,running=false,zx=null,last='',lastT=0,paused=false;
+let stream=null,running=false,last='',lastT=0,paused=false,frames=0,busy=false;
 const camst=m=>$('camst').textContent=m;
-async function stopCam(){running=false;try{zx&&zx.reset()}catch(e){}zx=null;if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}}
+async function stopCam(){running=false;if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}$('vid').srcObject=null}
 function found(code){
   code=String(code).trim();if(!code||!running)return;
   const now=Date.now();if(code===last&&now-lastT<4000)return;last=code;lastT=now;
   try{navigator.vibrate&&navigator.vibrate(80)}catch(e){}
   $('cam').classList.add('ok');setTimeout(()=>$('cam').classList.remove('ok'),600);
   camst('Lu : '+code+' · vise le suivant');$('q').value=code;show(code,'scan');
-  
+}
+async function tick(){
+  if(!running)return;
+  const v=$('vid');
+  if(!busy&&v.readyState>=2&&v.videoWidth){
+    busy=true;frames++;
+    try{
+      // zone du cadre rouge, convertie en coordonnées de la vidéo (object-fit: cover)
+      const box=$('cam').getBoundingClientRect(),vw=v.videoWidth,vh=v.videoHeight;
+      const sc=Math.max(box.width/vw,box.height/vh),visW=box.width/sc,visH=box.height/sc;
+      const x0=(vw-visW)/2,y0=(vh-visH)/2;
+      const sx=x0+visW*0.04,sy=y0+visH*0.22,sw=visW*0.92,sh=visH*0.56;
+      const t=await readRegion(v,sx,sy,sw,sh,1600,frames%3===0);
+      if(t)found(t);
+      if(frames%10===0)$('camdbg').textContent=vw+'×'+vh+' · '+frames+' images analysées'+(natDet?' · lecteur natif':'')+(window.ZXing?' · ZXing':'');
+    }catch(e){$('camdbg').textContent='Erreur : '+(e&&e.message||e)}
+    busy=false;
+  }
+  setTimeout(tick,60);
 }
 async function startCam(){
   if(running)return;
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){camst('Caméra indisponible : utilise « scanner depuis une photo »');return}
-  const v=$('vid'),cons={video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false};
-  running=true;paused=false;$('stop').textContent='Pause';camst('Vise un code-barres');
+  const v=$('vid');
+  running=true;paused=false;$('stop').textContent='Pause';camst('Vise un code-barres, à 10–15 cm');
   try{
-    let formats=null;
-    if('BarcodeDetector' in window){try{formats=await BarcodeDetector.getSupportedFormats()}catch(e){}}
-    if(formats&&formats.length){
-      stream=await navigator.mediaDevices.getUserMedia(cons);v.srcObject=stream;await v.play();
-      const det=new BarcodeDetector({formats});
-      const loop=async()=>{if(!running)return;try{if(v.readyState>=2){const c=await det.detect(v);if(c.length)found(c[0].rawValue)}}catch(e){}setTimeout(loop,120)};loop();
-    }else if(window.ZXing){
-      const hints=new Map();hints.set(ZXing.DecodeHintType.TRY_HARDER,true);
-      zx=new ZXing.BrowserMultiFormatReader(hints,150);
-      await zx.decodeFromConstraints(cons,v,res=>{if(res)found(res.getText())});
-    }else throw new Error('lecteur non chargé');
+    try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}},audio:false})}
+    catch(e){if(e&&e.name==='NotAllowedError')throw e;stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false})}
+    v.setAttribute('playsinline','');v.muted=true;v.srcObject=stream;await v.play();
+    try{const tr=stream.getVideoTracks()[0],cap=tr.getCapabilities&&tr.getCapabilities();if(cap&&cap.focusMode&&cap.focusMode.includes('continuous'))await tr.applyConstraints({advanced:[{focusMode:'continuous'}]})}catch(e){}
     $('live').classList.add('hide');
     try{localStorage.setItem('horotec-cam','1')}catch(e){}
+    tick();
   }catch(err){
     await stopCam();$('live').classList.remove('hide');
-    status(err&&err.name==='NotAllowedError'?'Accès caméra refusé : autorise la caméra pour ce site dans les réglages du navigateur.':'Caméra indisponible ('+(err&&err.message||err)+'). Utilise « scanner depuis une photo ».',true);
+    status(err&&err.name==='NotAllowedError'?'Accès caméra refusé : Réglages → Safari → Caméra → Autoriser, puis recharge la page.':'Caméra indisponible ('+(err&&err.message||err)+'). Utilise « scanner depuis une photo ».',true);
   }
 }
 $('live').addEventListener('click',startCam);
